@@ -13,11 +13,12 @@ import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils'
 import type { Quote } from '@/types'
 
 export default function QuotesPage() {
-  const { quotes, isAuthenticated } = useAppData()
+  const { quotes, clients, isAuthenticated } = useAppData()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [sending, setSending] = useState<string | null>(null)
   const [sendResult, setSendResult] = useState<{ id: string; ok: boolean } | null>(null)
+  const [emailPrompt, setEmailPrompt] = useState<{ quoteId: string; value: string } | null>(null)
 
   const filtered = quotes.filter(q => {
     const matchSearch =
@@ -27,9 +28,17 @@ export default function QuotesPage() {
     return matchSearch && matchStatus
   })
 
-  async function handleSendQuote(quote: Quote) {
-    setSending(quote.id)
+  function startSend(quote: Quote) {
+    const client = clients.find(c => c.id === quote.client_id)
+    const email = client?.email ?? ''
+    setEmailPrompt({ quoteId: quote.id, value: email })
     setSendResult(null)
+  }
+
+  async function confirmSend(quote: Quote, toEmail: string) {
+    if (!toEmail.trim()) return
+    setEmailPrompt(null)
+    setSending(quote.id)
     try {
       const html = `
         <h2>Quote ${quote.quote_number}</h2>
@@ -47,7 +56,7 @@ export default function QuotesPage() {
       const res = await fetch('/api/gmail/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: '', subject: `Quote ${quote.quote_number} from your tradesperson`, html }),
+        body: JSON.stringify({ to: toEmail.trim(), subject: `Quote ${quote.quote_number}`, html }),
       })
       setSendResult({ id: quote.id, ok: res.ok })
     } catch {
@@ -121,17 +130,34 @@ export default function QuotesPage() {
                     <span className="text-sm font-bold text-[#f5f5f5]">{formatCurrency(quote.total)}</span>
                     <span className="text-xs text-[#71717a]">inc. VAT</span>
                     {isAuthenticated && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs h-7 px-2"
-                        disabled={sending === quote.id}
-                        onClick={(e) => { e.stopPropagation(); handleSendQuote(quote) }}
-                        aria-label={`Send quote ${quote.quote_number} via Gmail`}
-                      >
-                        <Mail className="w-3 h-3 mr-1" />
-                        {sending === quote.id ? 'Sending…' : sendResult?.id === quote.id ? (sendResult.ok ? 'Sent ✓' : 'Failed') : 'Send'}
-                      </Button>
+                      emailPrompt?.quoteId === quote.id ? (
+                        <div className="flex flex-col gap-1 items-end" onClick={e => e.stopPropagation()}>
+                          <Input
+                            type="email"
+                            placeholder="Recipient email"
+                            value={emailPrompt.value}
+                            onChange={e => setEmailPrompt({ quoteId: quote.id, value: e.target.value })}
+                            className="h-7 text-xs w-44"
+                            autoFocus
+                          />
+                          <div className="flex gap-1">
+                            <Button size="sm" className="text-xs h-7 px-2" onClick={() => confirmSend(quote, emailPrompt.value)} disabled={!emailPrompt.value.trim()}>Send</Button>
+                            <Button size="sm" variant="outline" className="text-xs h-7 px-2" onClick={() => setEmailPrompt(null)}>Cancel</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs h-7 px-2"
+                          disabled={sending === quote.id}
+                          onClick={(e) => { e.stopPropagation(); startSend(quote) }}
+                          aria-label={`Send quote ${quote.quote_number} via Gmail`}
+                        >
+                          <Mail className="w-3 h-3 mr-1" />
+                          {sending === quote.id ? 'Sending…' : sendResult?.id === quote.id ? (sendResult.ok ? 'Sent ✓' : 'Failed') : 'Send'}
+                        </Button>
+                      )
                     )}
                     <ChevronRight className="w-4 h-4 text-[#71717a]" />
                   </div>

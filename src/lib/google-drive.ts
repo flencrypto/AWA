@@ -1,6 +1,13 @@
 import { google } from 'googleapis'
 
 const APP_FOLDER_NAME = 'TWATS Data'
+const VALID_COLLECTIONS = new Set(['clients', 'jobs', 'quotes', 'invoices', 'certificates'])
+
+function assertValidCollection(collection: string): void {
+  if (!VALID_COLLECTIONS.has(collection)) {
+    throw new Error(`Invalid collection: ${collection}`)
+  }
+}
 
 function getDriveClient(accessToken: string) {
   const auth = new google.auth.OAuth2()
@@ -12,7 +19,7 @@ export async function getOrCreateAppFolder(accessToken: string): Promise<string>
   const drive = getDriveClient(accessToken)
 
   const res = await drive.files.list({
-    q: `name='${APP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    q: `name='${APP_FOLDER_NAME.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
     fields: 'files(id)',
     spaces: 'drive',
   })
@@ -33,6 +40,7 @@ export async function getOrCreateAppFolder(accessToken: string): Promise<string>
 }
 
 export async function readCollection<T>(accessToken: string, collection: string): Promise<T[]> {
+  assertValidCollection(collection)
   const drive = getDriveClient(accessToken)
   const folderId = await getOrCreateAppFolder(accessToken)
 
@@ -61,6 +69,7 @@ export async function writeCollection<T>(
   collection: string,
   data: T[]
 ): Promise<void> {
+  assertValidCollection(collection)
   const drive = getDriveClient(accessToken)
   const folderId = await getOrCreateAppFolder(accessToken)
 

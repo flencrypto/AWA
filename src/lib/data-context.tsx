@@ -19,6 +19,7 @@ interface AppData {
   certificates: Certificate[]
   isLoading: boolean
   isAuthenticated: boolean
+  loadError: string | null
   saveClients: (data: Client[]) => Promise<void>
   saveJobs: (data: Job[]) => Promise<void>
   saveQuotes: (data: Quote[]) => Promise<void>
@@ -57,6 +58,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const [invoices, setInvoices] = useState<Invoice[]>(DEMO_INVOICES)
   const [certificates, setCertificates] = useState<Certificate[]>(DEMO_CERTIFICATES)
   const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
     if (status === 'loading') return
@@ -70,6 +72,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     }
 
     setIsLoading(true)
+    setLoadError(null)
     Promise.all([
       fetchCollection<Client>('clients', DEMO_CLIENTS),
       fetchCollection<Job>('jobs', DEMO_JOBS),
@@ -83,8 +86,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setInvoices(i)
       setCertificates(cert)
       setIsLoading(false)
-    }).catch(() => setIsLoading(false))
-  }, [isAuthenticated, status, session])
+    }).catch((err) => {
+      console.error('Failed to load data from Drive:', err)
+      setLoadError('Failed to load data from Google Drive. Showing local data.')
+      setIsLoading(false)
+    })
+  }, [isAuthenticated, status])
 
   const saveClients = useCallback(async (data: Client[]) => {
     setClients(data)
@@ -121,6 +128,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         certificates,
         isLoading,
         isAuthenticated,
+        loadError,
         saveClients,
         saveJobs,
         saveQuotes,
