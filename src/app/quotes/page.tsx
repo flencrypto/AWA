@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Plus, Search, FileText, Calendar, ChevronRight, Mail } from 'lucide-react'
 import { useAppData } from '@/lib/data-context'
-import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils'
+import { formatCurrency, formatDate, getStatusColor, escHtml } from '@/lib/utils'
 import type { Quote } from '@/types'
 
 export default function QuotesPage() {
@@ -41,17 +41,17 @@ export default function QuotesPage() {
     setSending(quote.id)
     try {
       const html = `
-        <h2>Quote ${quote.quote_number}</h2>
-        <p>Dear ${quote.client_name},</p>
+        <h2>Quote ${escHtml(quote.quote_number)}</h2>
+        <p>Dear ${escHtml(quote.client_name)},</p>
         <p>Please find your quote details below:</p>
         <table border="1" cellpadding="6" style="border-collapse:collapse">
           <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead>
           <tbody>
-            ${quote.items.map(i => `<tr><td>${i.description}</td><td>${i.quantity}</td><td>£${i.unit_price}</td><td>£${i.total}</td></tr>`).join('')}
+            ${quote.items.map(i => `<tr><td>${escHtml(i.description)}</td><td>${escHtml(i.quantity)}</td><td>£${escHtml(i.unit_price)}</td><td>£${escHtml(i.total)}</td></tr>`).join('')}
           </tbody>
         </table>
-        <p>Subtotal: £${quote.subtotal} | VAT (${quote.vat_rate}%): £${quote.vat_amount} | <strong>Total: £${quote.total}</strong></p>
-        <p>Valid until: ${formatDate(quote.valid_until)}</p>
+        <p>Subtotal: £${escHtml(quote.subtotal)} | VAT (${escHtml(quote.vat_rate)}%): £${escHtml(quote.vat_amount)} | <strong>Total: £${escHtml(quote.total)}</strong></p>
+        <p>Valid until: ${escHtml(formatDate(quote.valid_until))}</p>
       `
       const res = await fetch('/api/gmail/send', {
         method: 'POST',

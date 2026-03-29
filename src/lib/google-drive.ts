@@ -10,7 +10,10 @@ function assertValidCollection(collection: string): void {
 }
 
 function getDriveClient(accessToken: string) {
-  const auth = new google.auth.OAuth2()
+  const auth = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET
+  )
   auth.setCredentials({ access_token: accessToken })
   return google.drive({ version: 'v3', auth })
 }
@@ -57,10 +60,12 @@ export async function readCollection<T>(accessToken: string, collection: string)
   const fileId = res.data.files[0].id!
   const file = await drive.files.get({ fileId, alt: 'media' }, { responseType: 'text' })
 
+  const raw = file.data as string
   try {
-    return JSON.parse(file.data as string) as T[]
-  } catch {
-    return []
+    return JSON.parse(raw) as T[]
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(`Failed to parse collection '${collection}.json' from Google Drive: ${msg}`)
   }
 }
 

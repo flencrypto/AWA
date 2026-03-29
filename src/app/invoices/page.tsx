@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Plus, Search, Receipt, Calendar, AlertCircle, ChevronRight, Mail } from 'lucide-react'
 import { useAppData } from '@/lib/data-context'
-import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils'
+import { formatCurrency, formatDate, getStatusColor, escHtml } from '@/lib/utils'
 import type { Invoice } from '@/types'
 
 export default function InvoicesPage() {
@@ -45,17 +45,17 @@ export default function InvoicesPage() {
     setSending(invoice.id)
     try {
       const html = `
-        <h2>Invoice ${invoice.invoice_number}</h2>
-        <p>Dear ${invoice.client_name},</p>
+        <h2>Invoice ${escHtml(invoice.invoice_number)}</h2>
+        <p>Dear ${escHtml(invoice.client_name)},</p>
         <p>Please find your invoice details below:</p>
         <table border="1" cellpadding="6" style="border-collapse:collapse">
           <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead>
           <tbody>
-            ${invoice.items.map(i => `<tr><td>${i.description}</td><td>${i.quantity}</td><td>£${i.unit_price}</td><td>£${i.total}</td></tr>`).join('')}
+            ${invoice.items.map(i => `<tr><td>${escHtml(i.description)}</td><td>${escHtml(i.quantity)}</td><td>£${escHtml(i.unit_price)}</td><td>£${escHtml(i.total)}</td></tr>`).join('')}
           </tbody>
         </table>
-        <p>Subtotal: £${invoice.subtotal} | VAT (${invoice.vat_rate}%): £${invoice.vat_amount} | <strong>Total: £${invoice.total}</strong></p>
-        <p>Due date: ${formatDate(invoice.due_date)}</p>
+        <p>Subtotal: £${escHtml(invoice.subtotal)} | VAT (${escHtml(invoice.vat_rate)}%): £${escHtml(invoice.vat_amount)} | <strong>Total: £${escHtml(invoice.total)}</strong></p>
+        <p>Due date: ${escHtml(formatDate(invoice.due_date))}</p>
       `
       const res = await fetch('/api/gmail/send', {
         method: 'POST',

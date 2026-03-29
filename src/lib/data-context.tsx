@@ -29,15 +29,12 @@ interface AppData {
 
 const AppDataContext = createContext<AppData | null>(null)
 
-async function fetchCollection<T>(collection: string, fallback: T[]): Promise<T[]> {
-  try {
-    const res = await fetch(`/api/drive/${collection}`)
-    if (!res.ok) return fallback
-    const data: T[] = await res.json() as T[]
-    return data.length > 0 ? data : fallback
-  } catch {
-    return fallback
+async function fetchCollection<T>(collection: string): Promise<T[]> {
+  const res = await fetch(`/api/drive/${collection}`)
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} fetching collection '${collection}'`)
   }
+  return (await res.json()) as T[]
 }
 
 async function saveCollection<T>(collection: string, data: T[]): Promise<void> {
@@ -49,7 +46,7 @@ async function saveCollection<T>(collection: string, data: T[]): Promise<void> {
 }
 
 export function AppDataProvider({ children }: { children: React.ReactNode }) {
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const isAuthenticated = status === 'authenticated'
 
   const [clients, setClients] = useState<Client[]>(DEMO_CLIENTS)
@@ -68,29 +65,34 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       setQuotes(DEMO_QUOTES)
       setInvoices(DEMO_INVOICES)
       setCertificates(DEMO_CERTIFICATES)
+      setIsLoading(false)
+      setLoadError(null)
       return
     }
 
     setIsLoading(true)
     setLoadError(null)
     Promise.all([
-      fetchCollection<Client>('clients', DEMO_CLIENTS),
-      fetchCollection<Job>('jobs', DEMO_JOBS),
-      fetchCollection<Quote>('quotes', DEMO_QUOTES),
-      fetchCollection<Invoice>('invoices', DEMO_INVOICES),
-      fetchCollection<Certificate>('certificates', DEMO_CERTIFICATES),
-    ]).then(([c, j, q, i, cert]) => {
-      setClients(c)
-      setJobs(j)
-      setQuotes(q)
-      setInvoices(i)
-      setCertificates(cert)
-      setIsLoading(false)
-    }).catch((err) => {
-      console.error('Failed to load data from Drive:', err)
-      setLoadError('Failed to load data from Google Drive. Showing local data.')
-      setIsLoading(false)
-    })
+      fetchCollection<Client>('clients'),
+      fetchCollection<Job>('jobs'),
+      fetchCollection<Quote>('quotes'),
+      fetchCollection<Invoice>('invoices'),
+      fetchCollection<Certificate>('certificates'),
+    ])
+      .then(([c, j, q, i, cert]) => {
+        setClients(c)
+        setJobs(j)
+        setQuotes(q)
+        setInvoices(i)
+        setCertificates(cert)
+        setIsLoading(false)
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('Failed to load data from Drive:', msg)
+        setLoadError('Failed to load data from Google Drive. Showing local data.')
+        setIsLoading(false)
+      })
   }, [isAuthenticated, status])
 
   const saveClients = useCallback(async (data: Client[]) => {

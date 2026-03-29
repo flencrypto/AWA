@@ -1,11 +1,13 @@
-import { auth } from '@/auth'
+import { getToken } from 'next-auth/jwt'
 import { readCollection, writeCollection } from '@/lib/google-drive'
+import { getAuthSecret } from '@/lib/auth-secret'
 import { NextRequest, NextResponse } from 'next/server'
 
 const VALID_COLLECTIONS = ['clients', 'jobs', 'quotes', 'invoices', 'certificates']
+const MAX_PAYLOAD_BYTES = 500_000 // 500 kB
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ collection: string }> }
 ) {
   const { collection } = await params
@@ -13,13 +15,13 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid collection' }, { status: 400 })
   }
 
-  const session = await auth()
-  if (!session?.accessToken) {
+  const token = await getToken({ req, secret: getAuthSecret() })
+  if (!token?.accessToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   try {
-    const data = await readCollection(session.accessToken, collection)
+    const data = await readCollection(token.accessToken as string, collection)
     return NextResponse.json(data)
   } catch (err) {
     console.error(`Drive read error [${collection}]:`, err)
@@ -36,14 +38,22 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid collection' }, { status: 400 })
   }
 
-  const session = await auth()
-  if (!session?.accessToken) {
+  const token = await getToken({ req, secret: getAuthSecret() })
+  if (!token?.accessToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const contentLength = Number(req.headers.get('content-length') ?? 0)
+  if (contentLength > MAX_PAYLOAD_BYTES) {
+    return NextResponse.json({ error: 'Payload too large' }, { status: 413 })
+  }
+
   try {
-    const data = await req.json()
-    await writeCollection(session.accessToken, collection, data)
+    const body: unknown = await req.json()
+    if (!Array.isArray(body)) {
+      return NextResponse.json({ error: 'Request body must be an array' }, { status: 400 })
+    }
+    await writeCollection(token.accessToken as string, collection, body)
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error(`Drive write error [${collection}]:`, err)
