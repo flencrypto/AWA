@@ -7,15 +7,18 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { Plus, Search, Receipt, Calendar, AlertCircle, ChevronRight } from 'lucide-react'
-import { DEMO_INVOICES } from '@/lib/demo-data'
-import { formatCurrency, formatDate, getStatusColor } from '@/lib/utils'
+import { Plus, Search, Receipt, Calendar, AlertCircle, ChevronRight, Mail } from 'lucide-react'
+import { useAppData } from '@/lib/data-context'
+import { formatCurrency, formatDate, getStatusColor, escHtml } from '@/lib/utils'
 import type { Invoice } from '@/types'
 
 export default function InvoicesPage() {
+  const { invoices, clients, isAuthenticated } = useAppData()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [invoices] = useState<Invoice[]>(DEMO_INVOICES)
+  const [sending, setSending] = useState<string | null>(null)
+  const [sendResult, setSendResult] = useState<{ id: string; ok: boolean } | null>(null)
+  const [emailPrompt, setEmailPrompt] = useState<{ invoiceId: string; value: string } | null>(null)
 
   const filtered = invoices.filter(inv => {
     const matchSearch =
@@ -28,6 +31,44 @@ export default function InvoicesPage() {
   const totalOutstanding = invoices
     .filter(i => i.status !== 'paid' && i.status !== 'cancelled')
     .reduce((sum, i) => sum + (i.total - i.amount_paid), 0)
+
+  function startSend(invoice: Invoice) {
+    const client = clients.find(c => c.id === invoice.client_id)
+    const email = client?.email ?? ''
+    setEmailPrompt({ invoiceId: invoice.id, value: email })
+    setSendResult(null)
+  }
+
+  async function confirmSend(invoice: Invoice, toEmail: string) {
+    if (!toEmail.trim()) return
+    setEmailPrompt(null)
+    setSending(invoice.id)
+    try {
+      const html = `
+        <h2>Invoice ${escHtml(invoice.invoice_number)}</h2>
+        <p>Dear ${escHtml(invoice.client_name)},</p>
+        <p>Please find your invoice details below:</p>
+        <table border="1" cellpadding="6" style="border-collapse:collapse">
+          <thead><tr><th>Description</th><th>Qty</th><th>Unit</th><th>Total</th></tr></thead>
+          <tbody>
+            ${invoice.items.map(i => `<tr><td>${escHtml(i.description)}</td><td>${escHtml(i.quantity)}</td><td>£${escHtml(i.unit_price)}</td><td>£${escHtml(i.total)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+        <p>Subtotal: £${escHtml(invoice.subtotal)} | VAT (${escHtml(invoice.vat_rate)}%): £${escHtml(invoice.vat_amount)} | <strong>Total: £${escHtml(invoice.total)}</strong></p>
+        <p>Due date: ${escHtml(formatDate(invoice.due_date))}</p>
+      `
+      const res = await fetch('/api/gmail/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: toEmail.trim(), subject: `Invoice ${invoice.invoice_number}`, html }),
+      })
+      setSendResult({ id: invoice.id, ok: res.ok })
+    } catch {
+      setSendResult({ id: invoice.id, ok: false })
+    } finally {
+      setSending(null)
+    }
+  }
 
   return (
     <AppShell>
@@ -114,6 +155,36 @@ export default function InvoicesPage() {
                   <div className="flex flex-col items-end gap-2 shrink-0">
                     <span className="text-sm font-bold text-[#f5f5f5]">{formatCurrency(invoice.total)}</span>
                     <span className="text-xs text-[#71717a]">inc. VAT</span>
+                    {isAuthenticated && (
+                      emailPrompt?.invoiceId === invoice.id ? (
+                        <div className="flex flex-col gap-1 items-end" onClick={e => e.stopPropagation()}>
+                          <Input
+                            type="email"
+                            placeholder="Recipient email"
+                            value={emailPrompt.value}
+                            onChange={e => setEmailPrompt({ invoiceId: invoice.id, value: e.target.value })}
+                            className="h-7 text-xs w-44"
+                            autoFocus
+                          />
+                          <div className="flex gap-1">
+                            <Button size="sm" className="text-xs h-7 px-2" onClick={() => confirmSend(invoice, emailPrompt.value)} disabled={!emailPrompt.value.trim()}>Send</Button>
+                            <Button size="sm" variant="outline" className="text-xs h-7 px-2" onClick={() => setEmailPrompt(null)}>Cancel</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs h-7 px-2"
+                          disabled={sending === invoice.id}
+                          onClick={(e) => { e.stopPropagation(); startSend(invoice) }}
+                          aria-label={`Send invoice ${invoice.invoice_number} via Gmail`}
+                        >
+                          <Mail className="w-3 h-3 mr-1" />
+                          {sending === invoice.id ? 'Sending…' : sendResult?.id === invoice.id ? (sendResult.ok ? 'Sent ✓' : 'Failed') : 'Send'}
+                        </Button>
+                      )
+                    )}
                     <ChevronRight className="w-4 h-4 text-[#71717a]" />
                   </div>
                 </div>
